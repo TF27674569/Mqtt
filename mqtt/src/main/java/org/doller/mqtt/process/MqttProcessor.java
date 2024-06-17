@@ -11,8 +11,11 @@ import com.squareup.javapoet.TypeSpec;
 import org.doller.mqtt.annotation.Format;
 import org.doller.mqtt.annotation.Topic;
 import org.doller.mqtt.bean.TopicInfo;
+import org.doller.mqtt.mode.IMessage;
 
+import java.io.File;
 import java.lang.annotation.Annotation;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -37,6 +40,7 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
+import javax.tools.JavaFileObject;
 
 
 /**
@@ -153,6 +157,7 @@ public class MqttProcessor extends AbstractProcessor {
         for (AnnotationMirror mirror : annotationMirrors) {
             if (isType(mirror, Format.class)) {
                 TypeElement classElement = (TypeElement) formatElement.getEnclosingElement();
+                checkInterfaceIMessage(classElement);
                 String className = classElement.getQualifiedName().toString();
                 TopicInfo info = getTopicInfo(className);
                 Map<? extends ExecutableElement, ? extends AnnotationValue> elementValues = mirror.getElementValues();
@@ -171,6 +176,7 @@ public class MqttProcessor extends AbstractProcessor {
         for (AnnotationMirror mirror : annotationMirrors) {
             if (isType(mirror, Format.class)) {
                 TypeElement classElement = (TypeElement) formatElement.getEnclosingElement();
+                checkInterfaceIMessage(classElement);
                 String className = classElement.getQualifiedName().toString();
                 TopicInfo info = getTopicInfo(className);
                 String methodName = element.getSimpleName().toString();
@@ -189,6 +195,7 @@ public class MqttProcessor extends AbstractProcessor {
         for (AnnotationMirror mirror : annotationMirrors) {
             if (isType(mirror, Topic.class)) {
                 String className = typeElement.getQualifiedName().toString();
+                checkInterfaceIMessage(typeElement);
                 TopicInfo info = getTopicInfo(className);
                 Map<? extends ExecutableElement, ? extends AnnotationValue> elementValues = mirror.getElementValues();
                 for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry : elementValues.entrySet()) {
@@ -238,14 +245,26 @@ public class MqttProcessor extends AbstractProcessor {
 
     private boolean createJavaFile() {
         try {
-            System.out.println(PACKAGE_NAME + "-------------------------------------");
-            JavaFile.builder(PACKAGE_NAME, getTypeSpec())
+            JavaFile javaFile = JavaFile.builder(PACKAGE_NAME, getTypeSpec())
                     .addFileComment("Auto create file, issues @27674569@qq.com")
-                    .build().writeTo(mFiler);
+                    .build();
+            // 如果存再先删除
+            delete(javaFile.toJavaFileObject());
+            // 创建java文件
+            javaFile.writeTo(mFiler);
+            System.out.println("-------------------Doller run-------------------");
         } catch (Exception e) {
             System.out.println("------------------------GG-----------------------");
         }
         return false;
+    }
+
+    private void delete(JavaFileObject fileObject) {
+        String name = fileObject.toUri().toString();
+        File file = new File(name);
+        if (file.exists()) {
+            file.delete();
+        }
     }
 
 
@@ -326,5 +345,20 @@ public class MqttProcessor extends AbstractProcessor {
         topicInfo.className = className;
         topics.add(topicInfo);
         return topicInfo;
+    }
+
+
+
+    private void checkInterfaceIMessage(TypeElement typeElement) {
+        boolean isIMessageInterFace = false;
+        for (TypeMirror mirror : typeElement.getInterfaces()) {
+            if (IMessage.class.getName().equals(mirror.toString())) {
+                isIMessageInterFace = true;
+                break;
+            }
+        }
+        if (!isIMessageInterFace) {
+            error(typeElement,typeElement.getQualifiedName()+ "  not implement "+IMessage.class.getName());
+        }
     }
 }
