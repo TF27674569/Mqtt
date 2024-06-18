@@ -8,15 +8,15 @@ import org.doller.mqtt.mode.IMessage;
 import org.doller.mqtt.mode.IMsgConnect;
 import org.doller.mqtt.mode.ISubMessage;
 import org.doller.mqtt.mode.ISubStatus;
+import org.eclipse.paho.client.mqttv3.IMqttActionListener;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.IMqttMessageListener;
+import org.eclipse.paho.client.mqttv3.IMqttToken;
+import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
 import org.eclipse.paho.client.mqttv3.MqttCallback;
-import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
-import org.eclipse.paho.client.mqttv3.MqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
-import org.eclipse.paho.client.mqttv3.MqttTopic;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
 import java.util.concurrent.ExecutorService;
@@ -25,7 +25,7 @@ import java.util.concurrent.Executors;
 
 public class Mqtt implements MqttCallback, IMqttMessageListener, Helper.IBindListener, Helper.IUnBindListener {
 
-    private MqttClient mClient;
+    private MqttAsyncClient mClient;
 
     private static final ExecutorService POOL = Executors.newFixedThreadPool(4);
 
@@ -64,9 +64,9 @@ public class Mqtt implements MqttCallback, IMqttMessageListener, Helper.IBindLis
     /**
      * 单独订阅消息，不走配置注解
      *
-     * @param topic  消息topic
-     * @param qos    消息质量
-     * @param msg    消息体
+     * @param topic 消息topic
+     * @param qos   消息质量
+     * @param msg   消息体
      */
     public void subscribe(String topic, int qos, ISubMessage msg) {
         if (mClient != null) {
@@ -81,21 +81,25 @@ public class Mqtt implements MqttCallback, IMqttMessageListener, Helper.IBindLis
     /**
      * 发布消息
      */
-    public void publish(String topic, String message) throws Exception {
-        publish(topic, 0, message);
+    public void publish(String topic, String message) {
+        try {
+            publish(topic, 0, message);
+        } catch (Exception e) {
+            Logger.log("Mqtt", "publish err!", e);
+        }
     }
 
     /**
      * 发布消息
      */
     public void publish(String topic, int qos, String message) throws Exception {
-        if (mClient != null) {
+        if (mClient != null && mClient.isConnected()) {
             MqttMessage mqttMessage = new MqttMessage();
             mqttMessage.setQos(qos);
             mqttMessage.setPayload(message.getBytes());
-            MqttTopic mqttTopic = mClient.getTopic(topic);
-            MqttDeliveryToken token = mqttTopic.publish(mqttMessage);
-            token.waitForCompletion();
+            mClient.publish(topic, mqttMessage);
+        } else {
+            Logger.log("Mqtt", params.url + " mqtt not connect err!");
         }
     }
 
@@ -113,22 +117,37 @@ public class Mqtt implements MqttCallback, IMqttMessageListener, Helper.IBindLis
 
     private void createMqtt() {
         try {
-            mClient = new MqttClient(params.url, params.id, new MemoryPersistence());
-            MqttConnectOptions options = new MqttConnectOptions();
-            options.setUserName(params.userName);
-            options.setPassword(params.passWord.toCharArray());
-            options.setConnectionTimeout(params.connectTimeOut);///默认：30
-            options.setAutomaticReconnect(params.automaticReconnect);//默认：false
-            options.setCleanSession(params.cleanSession);//默认：true
-            options.setKeepAliveInterval(params.keepAliveInterval);//默认：60
+            mClient = new MqttAsyncClient(params.url, params.id, new MemoryPersistence());
+            MqttConnectOptions options = getMqttConnectOptions();
             mClient.setCallback(this);
-            mClient.connect(options);
-            params.connectListener.onConnectStatus(true, new Exception("success"));
+            mClient.connect(options,this, new IMqttActionListener() {
+                @Override
+                public void onSuccess(IMqttToken asyncActionToken) {
+                    params.connectListener.onConnectStatus(true, new Exception("success"));
+                    // 订阅消息
+                    subscribe();
+                }
 
-            subscribe();
+                @Override
+                public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                    params.connectListener.onConnectStatus(false, exception);
+                }
+            });
         } catch (MqttException e) {
             params.connectListener.onConnectStatus(false, e);
         }
+    }
+
+    private MqttConnectOptions getMqttConnectOptions() {
+        MqttConnectOptions options = new MqttConnectOptions();
+        options.setUserName(params.userName);
+        options.setPassword(params.passWord.toCharArray());
+        options.setConnectionTimeout(params.connectTimeOut);
+        options.setAutomaticReconnect(params.automaticReconnect);//默认：false
+        options.setCleanSession(params.cleanSession);//默认：true
+        options.setKeepAliveInterval(params.keepAliveInterval);
+        options.setCleanSession(true);
+        return options;
     }
 
     private void subscribe() {
@@ -160,9 +179,9 @@ public class Mqtt implements MqttCallback, IMqttMessageListener, Helper.IBindLis
 
     @Override
     public void messageArrived(String topic, MqttMessage message) throws Exception {
-        Logger.log("mqtt","--------------------------------------------------");
-        Logger.log("mqtt","config msg  @Topic -> topic:"+topic+"  msg->"+message);
-        Logger.log("mqtt","--------------------------------------------------");
+        Logger.log("mqtt", "--------------------------------------------------");
+        Logger.log("mqtt", "config msg  @Topic -> topic:" + topic + "  msg->" + message);
+        Logger.log("mqtt", "--------------------------------------------------");
         for (TopicInfo info : Helper.get().getTopics()) {
             for (String top : info.topics) {
                 if (topic.equals(top)) {
@@ -191,7 +210,7 @@ public class Mqtt implements MqttCallback, IMqttMessageListener, Helper.IBindLis
 
     @Override
     public void deliveryComplete(IMqttDeliveryToken token) {
-
+        Logger.log("mqtt", "deliveryComplete");
     }
 
     @Override
@@ -208,6 +227,24 @@ public class Mqtt implements MqttCallback, IMqttMessageListener, Helper.IBindLis
         if (mClient != null) {
             unSubscribe(topic);
         }
+    }
+
+    public boolean isConnected() {
+        return mClient != null && mClient.isConnected();
+    }
+
+    public void disconnect() {
+        if (mClient != null) {
+            try {
+                mClient.disconnect();
+            } catch (MqttException e) {
+                Logger.log("Mqtt", "disconnect err!", e);
+            }
+        }
+    }
+
+    public void reConnect() {
+        createMqtt();
     }
 
     public static class Builder {
@@ -282,14 +319,14 @@ public class Mqtt implements MqttCallback, IMqttMessageListener, Helper.IBindLis
             String userName = "";
             String passWord = "";
 
-            int connectTimeOut = 15000;
+            int connectTimeOut = 15;
             int keepAliveInterval = 60;
             boolean automaticReconnect = false;
             boolean cleanSession = false;
 
             IMsgConnect connectListener = (success, e) -> Logger.log("Mqtt", "connect:" + success, e);
 
-            ISubStatus subMessageListener = (topic, success) -> Logger.log("Mqtt", "SubMessage:" + success+" topic:"+topic);
+            ISubStatus subMessageListener = (topic, success) -> Logger.log("Mqtt", "SubMessage:" + success + " topic:" + topic);
 
             ICallFactory factory = Runnable::run;
         }

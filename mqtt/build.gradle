@@ -1,49 +1,20 @@
-plugins {
-    id 'java-library'
-    id 'maven-publish'
-}
 //apply plugin: 'java'
 
-
+plugins {
+    id 'java-library'
+}
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+//    sourceCompatibility = JavaVersion.VERSION_17
+//    targetCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
 }
 
 dependencies {
-    implementation 'com.google.auto.service:auto-service:1.0-rc4'// 用于自动为 JAVA Processor 生成 META-INF 信息。
+    //noinspection AnnotationProcessorOnCompilePath
+    compileOnly 'com.google.auto.service:auto-service:1.0-rc4'// 用于自动为 JAVA Processor 生成 META-INF 信息。
     annotationProcessor 'com.google.auto.service:auto-service:1.0-rc4'// 用于自动为 JAVA Processor 生成 META-INF 信息。
     implementation 'com.squareup:javapoet:1.10.0'//  squareup 公司，用于生成 .java 源文件的 API。
-    implementation'org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5'
+    compileOnly 'org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5'
 }
 
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            from components.java
-
-            groupId 'org.doller'
-            artifactId 'mqtt'
-            version '1.0.0'
-
-            // 如果需要添加额外的构建产物，可以使用 artifact 方法
-            // artifact sourceFile: file('path/to/artifact'), classifier: 'someClassifier'
-        }
-    }
-
-    repositories {
-//        maven {
-//            // 发布到本地 Maven 仓库
-//            url uri("${rootDir}/m2repo")
-//        }
-
-//         如果你要发布到远程 Maven 仓库，可以添加如下配置
-         maven {
-             url 'https://github.com/TF27674569/Mqtt'
-             credentials {
-                 username ''
-                 password ''
-             }
-         }
-    }
-}

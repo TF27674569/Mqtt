@@ -15,7 +15,6 @@ import org.doller.mqtt.mode.IMessage;
 
 import java.io.File;
 import java.lang.annotation.Annotation;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -32,13 +31,13 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
-import javax.lang.model.element.Name;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
 
@@ -61,6 +60,8 @@ public class MqttProcessor extends AbstractProcessor {
     private Filer mFiler;
 
     List<TopicInfo> topics = new ArrayList<>();
+    Elements elementUtils;
+    Types typeUtils;
 
     /**
      * 每一个注解处理器类都必须有一个空的构造函数。
@@ -74,6 +75,9 @@ public class MqttProcessor extends AbstractProcessor {
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);
         mFiler = processingEnv.getFiler();
+
+        elementUtils = processingEnv.getElementUtils();
+        typeUtils = processingEnv.getTypeUtils();
     }
 
 
@@ -348,17 +352,10 @@ public class MqttProcessor extends AbstractProcessor {
     }
 
 
-
     private void checkInterfaceIMessage(TypeElement typeElement) {
-        boolean isIMessageInterFace = false;
-        for (TypeMirror mirror : typeElement.getInterfaces()) {
-            if (IMessage.class.getName().equals(mirror.toString())) {
-                isIMessageInterFace = true;
-                break;
-            }
-        }
-        if (!isIMessageInterFace) {
-            error(typeElement,typeElement.getQualifiedName()+ "  not implement "+IMessage.class.getName());
+        InterfaceInheritanceChecker checker = new InterfaceInheritanceChecker(elementUtils, typeUtils);
+        if (!checker.implementsInterface(typeElement, IMessage.class.getName())) {
+            error(typeElement, typeElement.getQualifiedName() + "  not implement " + IMessage.class.getName());
         }
     }
 }
