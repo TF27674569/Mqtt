@@ -1,3 +1,4 @@
+```java
 1. 初始化
  mqtt = new Mqtt.Builder()
             .setUri(url, deviceId)// url：mqtt接口 deviceId 唯一标识
@@ -46,3 +47,4 @@ public class McuLogMessage implements IMessage {
     public void onMessage(String topic, String message) {
     }
  }
+```
